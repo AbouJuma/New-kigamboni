@@ -113,13 +113,13 @@ class OptimizedDisplayService {
             const url = new URL(config.serverUrl);
             const options = {
                 hostname: url.hostname,
-                path: url.pathname + '/index.php',  // Explicitly call index.php
+                path: url.pathname,
                 port: 443,
                 method: 'GET',
                 timeout: config.displayTimeout,
                 headers: {
                     'Accept': 'application/json',
-                    'User-Agent': 'POS-Display-Bridge/1.0'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 }
             };
             
