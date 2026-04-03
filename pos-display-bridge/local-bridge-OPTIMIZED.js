@@ -10,10 +10,10 @@ const fs = require('fs');
 
 // Optimized Configuration
 const config = {
-    serverUrl: 'https://client.ecofieldgroup.com/delight/pos-display-bridge',
-    pollInterval: 10000,      // 10 seconds (was 1-2 seconds)
-    errorRetryInterval: 30000,  // 30 seconds on error
-    displayTimeout: 5000,     // 5 second request timeout
+    serverUrl: 'https://client.ecofieldgroup.com/delight/display-bridge',
+    pollInterval: 10000,
+    errorRetryInterval: 30000,
+    displayTimeout: 5000,
     logFile: path.join(__dirname, 'bridge.log')
 };
 
@@ -133,7 +133,8 @@ class OptimizedDisplayService {
                     }
                     try {
                         // Check if response starts with HTML
-                        if (data.trim().startsWith('<')) {
+                        const trimmed = data.trim();
+                        if (trimmed.startsWith('<') || trimmed.startsWith('<!')) {
                             reject(new Error('Server returned HTML instead of JSON'));
                             return;
                         }

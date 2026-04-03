@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\BaseController;
+use App\Http\Controllers\CustomerDisplayController;
 use Modules\Store\Http\Controllers\StoreController;
 use Laravel\passport\Passport;
 
@@ -176,6 +177,10 @@ Route::group(['middleware' => ['web', 'auth:web', 'Is_Active', 'license.check', 
     ]);
 
 });
+
+// Customer Display Bridge Routes
+Route::match(['get', 'post'], '/display-bridge', [CustomerDisplayController::class, 'handle']);
+Route::post('/display-bridge/clear', [CustomerDisplayController::class, 'clear']);
 
 
 
