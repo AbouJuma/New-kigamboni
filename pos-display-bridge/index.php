@@ -3,6 +3,17 @@
  * Main entry point - handles all requests
  */
 
+// Log all requests for debugging
+$debugLog = __DIR__ . '/debug.log';
+$requestInfo = [
+    'time' => date('Y-m-d H:i:s'),
+    'method' => $_SERVER['REQUEST_METHOD'] ?? 'unknown',
+    'uri' => $_SERVER['REQUEST_URI'] ?? 'unknown',
+    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+    'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'unknown'
+];
+file_put_contents($debugLog, json_encode($requestInfo) . "\n", FILE_APPEND);
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');

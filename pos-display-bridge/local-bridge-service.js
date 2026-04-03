@@ -12,7 +12,7 @@ const path = require('path');
 
 // Configuration
 const config = {
-    serverUrl: 'https://client.ecofieldgroup.com/delight/pos-display-bridge/display-bridge.php',
+    serverUrl: 'https://client.ecofieldgroup.com/delight/pos-display-bridge/index.php',
     pollInterval: 1000, // Check server every 1 second
     localDataFile: path.join(__dirname, 'last_display_data.json'),
     logFile: path.join(__dirname, 'bridge.log')
