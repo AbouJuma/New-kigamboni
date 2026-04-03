@@ -1234,7 +1234,7 @@ import vueEasyPrint from "vue-easy-print";
 import VueBarcode from "vue-barcode";
 import FlagIcon from "vue-flag-icon";
 import Util from "./../../../utils";
-import { CustomerDisplayMixin } from "@/utils/customer-display.js";
+import { CustomerDisplayMixin } from "../../../utils/customer-display.js";
 import { loadStripe } from "@stripe/stripe-js";
 export default {
   mixins: [CustomerDisplayMixin],
