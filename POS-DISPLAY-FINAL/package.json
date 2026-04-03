@@ -1,0 +1,12 @@
+{
+  "name": "pos-display-bridge",
+  "version": "1.0.0",
+  "description": "POS Customer Display Bridge - Local Service",
+  "main": "bridge.js",
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "serialport": "^10.5.0"
+  }
+}
