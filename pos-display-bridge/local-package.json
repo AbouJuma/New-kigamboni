@@ -1,0 +1,17 @@
+{
+  "name": "pos-local-bridge",
+  "version": "1.0.0",
+  "description": "Local bridge service for POS customer display - works with PHP backend",
+  "main": "local-bridge-service.js",
+  "scripts": {
+    "start": "node local-bridge-service.js",
+    "install-service": "node install-local-service.js",
+    "uninstall-service": "node uninstall-local-service.js"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0"
+  },
+  "keywords": ["pos", "display", "bridge", "serial", "local"],
+  "author": "",
+  "license": "MIT"
+}

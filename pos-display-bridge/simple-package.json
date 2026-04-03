@@ -1,0 +1,13 @@
+{
+  "name": "simple-pos-display",
+  "version": "1.0.0",
+  "description": "Simple local customer display service for POS",
+  "main": "simple-service.js",
+  "scripts": {
+    "start": "node simple-service.js",
+    "test": "node test-display.js"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0"
+  }
+}

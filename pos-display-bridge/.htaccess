@@ -1,0 +1,25 @@
+# Allow access to PHP files
+<Files "*.php">
+    Order Allow,Deny
+    Allow from all
+</Files>
+
+# Enable PHP execution
+AddType application/x-httpd-php .php
+
+# DirectoryIndex
+DirectoryIndex display-bridge.php index.php
+
+# Allow CORS
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type"
+</IfModule>
+
+# Handle OPTIONS requests
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} OPTIONS
+    RewriteRule .* - [R=200,L]
+</IfModule>

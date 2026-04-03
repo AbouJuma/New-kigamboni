@@ -1,0 +1,72 @@
+# POS DISPLAY - LOCAL SERVICE SETUP
+# Run this on your POS machine (not the server!)
+
+## Step 1: Install Node.js
+1. Download from: https://nodejs.org/
+2. Run installer, click Next through all steps
+3. Restart your computer
+
+## Step 2: Copy Files
+Copy these files from the pos-display-bridge folder to a folder on your POS machine:
+- local-bridge-service.js
+- simple-service.js
+- test-display.js
+- simple-package.json
+
+## Step 3: Rename package file
+Rename simple-package.json to package.json
+
+## Step 4: Open Command Prompt
+Press Windows key, type "cmd", press Enter
+
+## Step 5: Navigate to folder
+cd C:\path\to\pos-display-bridge
+
+## Step 6: Install dependencies
+npm install serialport
+
+## Step 7: Test your display
+npm test
+(This will find which COM port your display uses)
+
+## Step 8: Start the service
+npm start
+
+## Step 9: Verify it's working
+Open browser on POS machine:
+http://localhost:3000
+
+You should see: {"success":true,"connected":true}
+
+## Step 10: Auto-start on boot (optional)
+To make it start automatically when Windows boots:
+1. Press Windows+R
+2. Type: shell:startup
+3. Create a new text file called "display-service.bat"
+4. Add this line: node C:\path\to\pos-display-bridge\simple-service.js
+5. Save
+
+## Troubleshooting
+
+### "Port not found"
+- Check Device Manager → Ports (COM & LPT)
+- Note which COM port your display uses
+- Edit simple-service.js and change the COM port
+
+### "Cannot find module"
+- Run: npm install
+
+### "EADDRINUSE"
+- Port 3000 is already in use
+- Close other programs or restart computer
+
+### Display shows nothing
+- Check if display is powered on
+- Check USB cable connection
+- Try different COM port in Device Manager
+
+## Support
+If issues persist, check:
+1. Device Manager shows the COM port
+2. Display shows "000" or some default text
+3. No other program is using the COM port
