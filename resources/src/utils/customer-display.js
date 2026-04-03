@@ -50,7 +50,7 @@ class CustomerDisplayBridge {
       }
 
       const result = await response.json();
-      this.connectionAttempts = 0; // Reset on successful connection
+      this.connectionAttempts = 0; // Reset on successful connection // ...
       return result;
     } catch (error) {
       console.error('Customer display error:', error);

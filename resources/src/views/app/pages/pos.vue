@@ -2121,6 +2121,7 @@ export default {
       this.product.detail_id = this.details[len - 1].detail_id + 1;
     },
     //---------------------- get_units ------------------------------\\
+     //---------------------- get_units ------------------------------\\
     get_units(value) {
       axios
         .get("get_units?id=" + value)
