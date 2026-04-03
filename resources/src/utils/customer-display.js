@@ -17,7 +17,7 @@ class CustomerDisplayBridge {
 
   async checkServiceAvailability() {
     try {
-      const response = await fetch(`${this.apiBase}/`);
+      const response = await fetch(this.apiBase);
       const data = await response.json();
       this.enabled = data.success === true;
       console.log('PHP display bridge available:', data);
