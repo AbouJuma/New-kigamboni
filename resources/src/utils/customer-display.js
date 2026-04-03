@@ -5,7 +5,7 @@
 
 class CustomerDisplayBridge {
   constructor() {
-    this.apiBase = 'https://client.ecofieldgroup.com/delight/pos-display-bridge';
+    this.apiBase = 'https://client.ecofieldgroup.com/delight/display-bridge.php';
     this.enabled = true;
     this.lastTotal = 0;
     this.connectionAttempts = 0;
