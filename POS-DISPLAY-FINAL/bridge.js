@@ -95,10 +95,10 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         
-        // Clear display first (ESC @), then write text
-        const clearCmd = Buffer.from([0x1B, 0x40]); // ESC @ = Clear
-        const textBuf = Buffer.from(text.toString().substring(0, 20), 'ascii');
-        const data = Buffer.concat([clearCmd, textBuf]);
+        // Send CR + text - position cursor then write
+        const cr = Buffer.from([0x0D]); // Carriage return
+        const textBuf = Buffer.from(text.toString().substring(0, 8));
+        const data = Buffer.concat([cr, textBuf]);
         
         this.displayPort.write(data, (err) => {
             if (err) this.log(`❌ Write error: ${err.message}`);
