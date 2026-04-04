@@ -31,22 +31,37 @@
         }
     }
 
-    // Read Vue data safely
+    // Read Vue data safely - find the one with GrandTotal
     function getCartData() {
         const allElements = document.querySelectorAll('*');
         for (let el of allElements) {
             if (el.__vue__) {
                 const vm = el.__vue__;
                 try {
-                    return {
-                        total: vm.GrandTotal,
-                        items: vm.details || []
-                    };
-                } catch(e) {
-                    return null;
-                }
+                    // Look for the POS Vue instance (has GrandTotal)
+                    if (typeof vm.GrandTotal !== 'undefined') {
+                        log('Found Vue with GrandTotal:', vm.GrandTotal);
+                        return {
+                            total: vm.GrandTotal,
+                            items: vm.details || []
+                        };
+                    }
+                } catch(e) {}
             }
         }
+        
+        // Fallback: read from DOM
+        const totalEl = document.querySelector('.total-amount, .grand-total, .total-display, [data-total]');
+        if (totalEl) {
+            const text = totalEl.textContent || '';
+            const match = text.match(/[\d,]+\.?\d*/);
+            if (match) {
+                const total = parseFloat(match[0].replace(/,/g, ''));
+                log('Found total in DOM:', total);
+                return { total: total, items: [] };
+            }
+        }
+        
         return null;
     }
 
