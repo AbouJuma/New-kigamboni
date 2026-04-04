@@ -52,14 +52,18 @@
         if (app && app.__vue__) {
             const vm = app.__vue__;
             if (vm.GrandTotal !== undefined) {
-                return Math.round(vm.GrandTotal * 100);
+                // Return as-is, bridge expects actual amount
+                return vm.GrandTotal;
             }
         }
-        // Fallback to DOM
-        const el = document.querySelector('.total-amount, .grand-total');
-        if (el) {
-            const match = el.textContent.match(/([\d,]+\.?\d*)/);
-            if (match) return parseFloat(match[1].replace(/,/g, '')) * 100;
+        // Fallback to DOM - read displayed total
+        const totalPayableEl = document.querySelector('.total-payable, .grand-total, .total-amount');
+        if (totalPayableEl) {
+            const text = totalPayableEl.textContent || '';
+            const match = text.match(/TSH\s*([\d,]+\.?\d*)/i) || text.match(/([\d,]+\.?\d*)/);
+            if (match) {
+                return parseFloat(match[1].replace(/,/g, ''));
+            }
         }
         return 0;
     }
@@ -68,7 +72,7 @@
         const current = getTotalFromPage();
         if (current !== lastTotal && current > 0) {
             lastTotal = current;
-            document.getElementById('display-total').value = current / 100;
+            document.getElementById('display-total').value = current;
             if (autoSendEnabled) {
                 sendToServer(current);
             }
@@ -77,7 +81,7 @@
 
     document.getElementById('send-display').onclick = function() {
         const total = document.getElementById('display-total').value;
-        if (total && total > 0) sendToServer(total * 100);
+        if (total && total > 0) sendToServer(total);  // Send as-is, no multiply
     };
     
     document.getElementById('auto-send').onchange = function() {
