@@ -1,6 +1,5 @@
 /**
  * Customer Display Bridge - Browser Side
- * Fixed: item detection, duplicate adds, correct total field
  */
 (function() {
     'use strict';
@@ -12,13 +11,12 @@
     };
 
     let lastTotal = 0;
-    let lastCartLength = 0;         // track cart size
-    let lastCartSnapshot = '';      // track cart contents as JSON string
+    let lastItem = null;
     let foundVue = false;
 
     function log(msg, data) {
         if (CONFIG.debug) {
-            console.log('[Display Bridge]', msg, data !== undefined ? data : '');
+            console.log('[Display Bridge]', msg, data || '');
         }
     }
 
@@ -41,31 +39,43 @@
         }
     }
 
+    // Find Vue instance - multiple methods
     function findVueInstance() {
-        // Method 1: known root elements
-        for (const selector of ['#app', '.pos-app', '[data-v-app]']) {
-            const el = document.querySelector(selector);
-            if (el && el.__vue__) {
-                if (!foundVue) log('Found Vue via ' + selector);
-                return el.__vue__;
-            }
+        // Method 1: __vue__ property
+        let el = document.querySelector('#app') || document.querySelector('.pos-app') || document.querySelector('[data-v-app]');
+        if (el && el.__vue__) {
+            if (!foundVue) log('Found Vue via __vue__');
+            return el.__vue__;
         }
-        // Method 2: scan all elements
-        for (const el of document.querySelectorAll('*')) {
+
+        // Method 2: Scan all elements for __vue__
+        const allElements = document.querySelectorAll('*');
+        for (let el of allElements) {
             if (el.__vue__) {
                 if (!foundVue) log('Found Vue via element scan');
                 return el.__vue__;
             }
         }
+
         return null;
     }
 
+    // Watch for changes
     function watchCart() {
         const vm = findVueInstance();
-
+        
         if (!vm) {
             if (!foundVue) {
-                log('Vue not found yet...');
+                const appEl = document.querySelector('#app');
+                const posEl = document.querySelector('.pos-app');
+                log('Vue not found. Elements: #app=' + !!appEl + ', .pos-app=' + !!posEl);
+                // Try to find any Vue element
+                const all = document.querySelectorAll('*');
+                let vueCount = 0;
+                for (let el of all) {
+                    if (el.__vue__) vueCount++;
+                }
+                log('Elements with __vue__:', vueCount);
             }
             return;
         }
@@ -73,94 +83,79 @@
         if (!foundVue) {
             foundVue = true;
             log('✅ Vue found!');
-            log('  Keys:', Object.keys(vm).slice(0, 30).join(', '));
+            log('  Keys:', Object.keys(vm).slice(0, 20).join(', '));
             log('  GrandTotal:', vm.GrandTotal);
             log('  details:', vm.details ? 'Array(' + vm.details.length + ')' : 'undefined');
         }
 
-        // ── 1. Track GrandTotal changes ──────────────────────────────
+        // Always log current state for debugging
+        if (CONFIG.debug && vm.GrandTotal !== undefined) {
+            log('Current GrandTotal:', vm.GrandTotal, 'Last:', lastTotal);
+        }
+
+        // Check for GrandTotal
         if (vm.GrandTotal !== undefined && vm.GrandTotal !== lastTotal) {
             lastTotal = vm.GrandTotal;
             log('>>> Total CHANGED to:', lastTotal);
             sendToServer({
                 type: 'total',
-                action: 'total',
                 total: lastTotal,
                 timestamp: new Date().toISOString()
             });
         }
 
-        // ── 2. Track cart item changes ───────────────────────────────
-        if (vm.details && Array.isArray(vm.details)) {
-
-            // Build a snapshot of current cart: name + quantity for every item
-            // This catches: new items, quantity changes, removals
-            const snapshot = vm.details.map(d => `${d.name}:${d.quantity || 1}`).join('|');
-
-            if (snapshot !== lastCartSnapshot) {
-                const prevLength = lastCartLength;
-                lastCartLength  = vm.details.length;
-                lastCartSnapshot = snapshot;
-
-                if (vm.details.length === 0) {
-                    // Cart cleared
-                    log('Cart cleared');
-                    sendToServer({
-                        type: 'clear',
-                        action: 'clear',
-                        timestamp: new Date().toISOString()
-                    });
-                    return;
-                }
-
-                // Find which item changed by comparing lengths and quantities
-                // Always show the most recently touched item (last in array)
-                const lastDetail = vm.details[vm.details.length - 1];
-                const itemName  = lastDetail.name || '';
-                const itemPrice = lastDetail.Total_price || lastDetail.Net_price || lastDetail.price || 0;
-                const itemQty   = lastDetail.quantity || 1;
-
-                log('Cart changed. Item:', itemName, 'Qty:', itemQty, 'Price:', itemPrice);
-
+        // Check for cart items
+        if (vm.details && Array.isArray(vm.details) && vm.details.length > 0) {
+            const lastDetail = vm.details[vm.details.length - 1];
+            if (lastDetail && lastDetail.name && lastDetail.name !== lastItem) {
+                lastItem = lastDetail.name;
+                log('Item added:', lastItem);
                 sendToServer({
                     type: 'item',
-                    action: 'item',
-                    itemName: itemName,
-                    name: itemName,
-                    quantity: itemQty,
-                    total: itemPrice,         // display will show this after 3s
+                    name: lastDetail.name,
+                    price: lastDetail.Total_price || lastDetail.Net_price,
+                    quantity: lastDetail.quantity || 1,
                     timestamp: new Date().toISOString()
                 });
             }
         }
     }
 
-    function init() {
-        log('=== Display Bridge v3 Started ===');
-
-        setInterval(watchCart, CONFIG.pollInterval);
-
-        // Also fire immediately on click anywhere (catches add-to-cart faster)
-        document.addEventListener('click', function() {
-            setTimeout(watchCart, 100);
-            setTimeout(watchCart, 300);
+    // Click listener - detect add to cart
+    function watchClicks() {
+        document.addEventListener('click', function(e) {
+            const target = e.target;
+            const text = (target.textContent || '').toLowerCase();
+            
+            if (text.includes('add') || text.includes('cart') || 
+                target.closest('.add-to-cart') || target.closest('.btn-add')) {
+                log('Add to cart clicked');
+                setTimeout(watchCart, 100);
+                setTimeout(watchCart, 500);
+            }
         });
+    }
 
-        // Test button
+    // Initialize
+    function init() {
+        log('=== Display Bridge v2 Started ===');
+        
+        setInterval(watchCart, CONFIG.pollInterval);
+        watchClicks();
+
+        // Add test button
         const btn = document.createElement('button');
         btn.textContent = '📺 Test Display';
         btn.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;background:#4CAF50;color:white;border:none;padding:8px 12px;cursor:pointer;border-radius:4px;font-size:12px;';
         btn.onclick = function() {
             watchCart();
-            const vm = findVueInstance();
-            if (vm) {
-                log('Vue state - GrandTotal:', vm.GrandTotal, 'details:', vm.details ? vm.details.length : 'N/A');
-                log('Cart snapshot:', lastCartSnapshot);
-            }
+            sendToServer({
+                type: 'test',
+                message: 'Manual test',
+                timestamp: new Date().toISOString()
+            });
         };
         document.body.appendChild(btn);
-
-        log('API ready: CustomerDisplay.test(), .findVue(), .showTotal(n), .showItem(name, price)');
     }
 
     if (document.readyState === 'loading') {
@@ -170,12 +165,11 @@
     }
 
     window.CustomerDisplay = {
-        test:      () => sendToServer({ type: 'test', timestamp: new Date().toISOString() }),
-        showItem:  (name, price) => sendToServer({ type: 'item', action: 'item', itemName: name, name, total: price, timestamp: new Date().toISOString() }),
-        showTotal: (total) => sendToServer({ type: 'total', action: 'total', total, timestamp: new Date().toISOString() }),
-        clear:     () => sendToServer({ type: 'clear', action: 'clear', timestamp: new Date().toISOString() }),
-        findVue:   () => { const vm = findVueInstance(); log('Vue:', vm); return vm; },
-        snapshot:  () => log('Snapshot:', lastCartSnapshot)
+        test: () => sendToServer({ type: 'test', timestamp: new Date().toISOString() }),
+        showItem: (name, price) => sendToServer({ type: 'item', name, price, timestamp: new Date().toISOString() }),
+        showTotal: (total) => sendToServer({ type: 'total', total, timestamp: new Date().toISOString() }),
+        findVue: () => { const vm = findVueInstance(); log('Vue:', vm); return vm; }
     };
 
+    log('API: CustomerDisplay.test(), .findVue()');
 })();
