@@ -95,8 +95,10 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         const padded = text.toString().substring(0, 20).padEnd(20, ' ');
-        this.displayPort.write(padded);
-        this.log(`📺 ${text}`);
+        this.displayPort.write(padded, (err) => {
+            if (err) this.log(`❌ Write error: ${err.message}`);
+            else this.log(`📺 Display: "${text}"`);
+        });
     }
     
     async poll() {
