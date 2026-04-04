@@ -106,16 +106,19 @@ class DisplayService {
             const data = await this.fetchData();
             if (data.success && data.data) {
                 const d = data.data;
-                if (d.action === 'total' && d.total !== undefined) {
+                // Handle both 'action' and 'type' fields
+                const action = d.action || d.type;
+                
+                if (action === 'total' && d.total !== undefined) {
                     this.showText(`TOTAL: ${(d.total/100).toFixed(2)}`);
-                } else if (d.action === 'item' && d.itemName) {
-                    this.showText(d.itemName.substring(0, 16));
+                } else if (action === 'item' && (d.itemName || d.name)) {
+                    this.showText((d.itemName || d.name).substring(0, 16));
                     if (d.total !== undefined) {
                         setTimeout(() => {
                             this.showText(`TOTAL: ${(d.total/100).toFixed(2)}`);
                         }, 3000);
                     }
-                } else if (d.action === 'clear') {
+                } else if (action === 'clear') {
                     this.showText('');
                 }
             }
