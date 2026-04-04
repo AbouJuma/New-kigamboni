@@ -43,69 +43,49 @@
         if (el) el.textContent = msg;
     }
 
-    // ── Read total from DOM ───────────────────────────────────────────
-    // From screenshot: "Total Payable : TSH 9000.00" in a green element
+    // ── Read total from Vue instance ───────────────────────────────────
     function getTotalFromDOM() {
-
-        // Strategy 1: find element containing "Total Payable" text
+        // Strategy 1: Vue instance scan
+        for (const el of document.querySelectorAll('*')) {
+            if (!el.__vue__) continue;
+            const vm = el.__vue__;
+            
+            // Look specifically for GrandTotal
+            if (vm.GrandTotal !== undefined && vm.GrandTotal > 0) {
+                console.log('[Display] Found GrandTotal in Vue:', vm.GrandTotal);
+                return { value: vm.GrandTotal, source: 'Vue:GrandTotal' };
+            }
+            
+            // Also check $data
+            if (vm.$data && vm.$data.GrandTotal !== undefined && vm.$data.GrandTotal > 0) {
+                console.log('[Display] Found GrandTotal in Vue $data:', vm.$data.GrandTotal);
+                return { value: vm.$data.GrandTotal, source: 'Vue:$data.GrandTotal' };
+            }
+        }
+        
+        // Strategy 2: DOM - find "Total Payable" text
         const allEls = document.querySelectorAll('*');
         for (const el of allEls) {
-            // Skip script/style tags and our own widget
             if (['SCRIPT','STYLE','HEAD'].includes(el.tagName)) continue;
             if (el.closest('#customer-display-widget')) continue;
-
+            
             const text = el.childNodes.length === 1 || el.children.length === 0
                 ? el.textContent || ''
                 : '';
-
+                
             if (/total\s*payable/i.test(text)) {
-                // Extract number from text like "Total Payable : TSH 9000.00"
-                const match = text.match(/[\d,]+\.?\d*/g);
-                if (match) {
-                    // Take the largest number found (the total, not tax/discount)
-                    const nums = match.map(m => parseFloat(m.replace(/,/g, ''))).filter(n => n > 0);
-                    if (nums.length) {
-                        const total = Math.max(...nums);
-                        return { value: Math.round(total), source: 'Total Payable text' };
+                const match = text.match(/([\d,]+\.?\d*)/g);
+                if (match && match.length > 0) {
+                    // Take the LAST number (should be the total)
+                    const total = parseFloat(match[match.length - 1].replace(/,/g, ''));
+                    if (total > 0) {
+                        console.log('[Display] Found Total Payable:', total);
+                        return { value: total, source: 'DOM:Total Payable' };
                     }
                 }
             }
         }
-
-        // Strategy 2: Vue $data scan across ALL instances
-        for (const el of document.querySelectorAll('*')) {
-            if (!el.__vue__) continue;
-            const vm = el.__vue__;
-            const data = vm.$data || {};
-
-            // Check common property names
-            const props = [
-                'GrandTotal','grandTotal','grand_total',
-                'TotalPayable','totalPayable','total_payable',
-                'NetTotal','netTotal','net_total',
-                'CartTotal','cartTotal',
-                'FinalTotal','finalTotal',
-                'totalAmount','TotalAmount',
-                'payable','Payable'
-            ];
-
-            for (const prop of props) {
-                // Check on vm directly and on $data
-                const val = vm[prop] !== undefined ? vm[prop] : data[prop];
-                if (val !== undefined && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
-                    console.log('[Display] Found Vue prop:', prop, '=', val);
-                    return { value: Math.round(parseFloat(val)), source: 'Vue:' + prop };
-                }
-            }
-
-            // Also scan $data for any number > 0
-            Object.keys(data).forEach(k => {
-                if (typeof data[k] === 'number' && data[k] > 100) {
-                    console.log('[Display] Vue $data numeric:', k, '=', data[k]);
-                }
-            });
-        }
-
+        
         return null;
     }
 
