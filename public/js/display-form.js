@@ -1,6 +1,6 @@
 /**
- * Customer Display Bridge - Browser Side v5
- * Reads Total Payable directly from DOM green bar
+ * Customer Display Bridge - Browser Side v6
+ * Precisely reads Total Payable from the green bar only
  */
 (function() {
     'use strict';
@@ -13,11 +13,11 @@
     let lastTotal = 0;
     let autoSendEnabled = true;
 
-    // ── UI ────────────────────────────────────────────────────────────
-    // Remove any existing display widget first
+    // ── Remove any existing widget ────────────────────────────────────
     const existing = document.getElementById('customer-display-widget');
     if (existing) existing.remove();
 
+    // ── UI ────────────────────────────────────────────────────────────
     const div = document.createElement('div');
     div.id = 'customer-display-widget';
     div.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;background:#fff;border:2px solid #4CAF50;padding:10px;border-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,0.2);min-width:200px;';
@@ -37,55 +37,85 @@
         const el = document.getElementById('display-status');
         if (el) { el.textContent = msg; el.style.color = color || '#666'; }
     }
-
     function setSource(msg) {
         const el = document.getElementById('display-source');
         if (el) el.textContent = msg;
     }
 
-    // ── Read total from Vue instance ───────────────────────────────────
+    // ── Read total ONLY from green Total Payable bar ──────────────────
     function getTotalFromDOM() {
-        // Strategy 1: Vue instance scan
-        for (const el of document.querySelectorAll('*')) {
-            if (!el.__vue__) continue;
-            const vm = el.__vue__;
-            
-            // Look specifically for GrandTotal
-            if (vm.GrandTotal !== undefined && vm.GrandTotal > 0) {
-                console.log('[Display] Found GrandTotal in Vue:', vm.GrandTotal);
-                return { value: vm.GrandTotal, source: 'Vue:GrandTotal' };
-            }
-            
-            // Also check $data
-            if (vm.$data && vm.$data.GrandTotal !== undefined && vm.$data.GrandTotal > 0) {
-                console.log('[Display] Found GrandTotal in Vue $data:', vm.$data.GrandTotal);
-                return { value: vm.$data.GrandTotal, source: 'Vue:$data.GrandTotal' };
-            }
-        }
-        
-        // Strategy 2: DOM - find "Total Payable" text
-        const allEls = document.querySelectorAll('*');
-        for (const el of allEls) {
-            if (['SCRIPT','STYLE','HEAD'].includes(el.tagName)) continue;
-            if (el.closest('#customer-display-widget')) continue;
-            
-            const text = el.childNodes.length === 1 || el.children.length === 0
-                ? el.textContent || ''
-                : '';
-                
-            if (/total\s*payable/i.test(text)) {
-                const match = text.match(/([\d,]+\.?\d*)/g);
-                if (match && match.length > 0) {
-                    // Take the LAST number (should be the total)
-                    const total = parseFloat(match[match.length - 1].replace(/,/g, ''));
-                    if (total > 0) {
-                        console.log('[Display] Found Total Payable:', total);
-                        return { value: total, source: 'DOM:Total Payable' };
+
+        // Look for elements whose DIRECT text contains "Total Payable"
+        // and extract TSH amount — must be a leaf-level or near-leaf element
+        // to avoid grabbing product barcodes from sibling elements
+        const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            null
+        );
+
+        let node;
+        while ((node = walker.nextNode())) {
+            const text = node.textContent.trim();
+
+            // Must contain "Total Payable" AND "TSH" in same text node
+            if (/total\s*payable/i.test(text) && /TSH/i.test(text)) {
+                // Extract the number right after TSH
+                const match = text.match(/TSH\s*([\d,]+\.?\d*)/i);
+                if (match) {
+                    const val = parseFloat(match[1].replace(/,/g, ''));
+                    // Valid total: must be a reasonable number (0 to 999,999,999)
+                    if (!isNaN(val) && val >= 0 && val < 1000000000) {
+                        console.log('[Display] Found via text node:', val);
+                        return { value: Math.round(val), source: 'Total Payable bar' };
                     }
                 }
             }
         }
-        
+
+        // Fallback: find the green bar element by background color or known classes
+        // From screenshot it's a teal/green button-like div
+        const candidates = document.querySelectorAll(
+            '.total-payable, .grand-total, .totalPayable, ' +
+            '[class*="total-pay"], [class*="grand-tot"], [class*="payable"]'
+        );
+        for (const el of candidates) {
+            if (el.closest('#customer-display-widget')) continue;
+            const text = el.textContent || '';
+            const match = text.match(/TSH\s*([\d,]+\.?\d*)/i) ||
+                          text.match(/([\d,]+\.\d{2})/);
+            if (match) {
+                const val = parseFloat(match[1].replace(/,/g, ''));
+                if (!isNaN(val) && val >= 0 && val < 1000000000) {
+                    console.log('[Display] Found via class selector:', val);
+                    return { value: Math.round(val), source: el.className };
+                }
+            }
+        }
+
+        // Last fallback: Vue $data scan
+        for (const el of document.querySelectorAll('*')) {
+            if (!el.__vue__) continue;
+            const vm = el.__vue__;
+            const sources = [vm, vm.$data || {}];
+            const props = [
+                'GrandTotal','grandTotal','grand_total',
+                'TotalPayable','totalPayable','NetTotal','netTotal',
+                'CartTotal','cartTotal','FinalTotal','finalTotal',
+                'totalAmount','TotalAmount','payable','Payable'
+            ];
+            for (const src of sources) {
+                for (const prop of props) {
+                    const val = src[prop];
+                    if (val !== undefined && !isNaN(parseFloat(val)) &&
+                        parseFloat(val) >= 0 && parseFloat(val) < 1000000000) {
+                        console.log('[Display] Found Vue prop:', prop, '=', val);
+                        return { value: Math.round(parseFloat(val)), source: 'Vue:' + prop };
+                    }
+                }
+            }
+        }
+
         return null;
     }
 
@@ -108,7 +138,6 @@
             console.log('[Display] Sent to display:', total);
         } catch (err) {
             setStatus('❌ ' + err.message, '#f44336');
-            console.error('[Display] Error:', err.message);
         }
     }
 
@@ -119,31 +148,29 @@
         const result = getTotalFromDOM();
 
         if (!result) {
-            setSource('⚠️ Cannot find total on page');
+            setSource('⚠️ Cannot find Total Payable');
             return;
         }
 
         const amount = result.value;
         setSource('📍 ' + result.source);
 
-        // Always update the input field
+        // Always update input field
         const input = document.getElementById('display-total');
         if (input) input.value = amount;
 
-        // Only send when value changes
-        if (amount !== lastTotal && amount > 0) {
+        // Only send when value actually changes
+        if (amount !== lastTotal) {
             lastTotal = amount;
-            sendToServer(amount);
+            if (amount > 0) sendToServer(amount);
+            else setStatus('Cart empty (0)', '#999');
         }
     }
 
-    // ── Button handlers ───────────────────────────────────────────────
+    // ── Buttons ───────────────────────────────────────────────────────
     document.getElementById('send-display').onclick = function() {
         const val = parseFloat(document.getElementById('display-total').value);
-        if (val > 0) {
-            lastTotal = val;
-            sendToServer(val);
-        }
+        if (val > 0) { lastTotal = val; sendToServer(val); }
     };
 
     document.getElementById('auto-send').onchange = function() {
@@ -153,7 +180,7 @@
 
     // ── Start ─────────────────────────────────────────────────────────
     setInterval(watchAndSend, CONFIG.pollInterval);
-    setStatus('Watching for Total Payable...', '#999');
-    console.log('[Display] v5 started');
+    setStatus('Watching...', '#999');
+    console.log('[Display] v6 started');
 
 })();
