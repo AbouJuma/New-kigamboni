@@ -95,14 +95,16 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         
+        // Send ESC @ to initialize/clear display, then send text
+        const initCmd = Buffer.from([0x1B, 0x40]); // ESC @ = Initialize/Clear
         const textBuf = Buffer.from(text.toString().substring(0, 8));
+        const data = Buffer.concat([initCmd, textBuf]);
         
-        this.displayPort.write(textBuf, (err) => {
+        this.displayPort.write(data, (err) => {
             if (err) {
                 this.log(`❌ Write error: ${err.message}`);
                 return;
             }
-            // Flush to ensure data is sent
             this.displayPort.drain((drainErr) => {
                 if (drainErr) this.log(`❌ Drain error: ${drainErr.message}`);
                 else this.log(`📺 Display: "${text}"`);
