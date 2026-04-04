@@ -60,15 +60,23 @@
         return null;
     }
 
-    // Watch for changes
+    // Watch for changes - improved version
     function watchChanges() {
         const data = getVueData();
-        if (!data) return;
+        if (!data) {
+            // Try to find Vue again if not found
+            return;
+        }
 
-        // Check total changed
-        if (data.total !== null && data.total !== lastTotal) {
+        // Always log current state for debugging
+        if (Math.random() < 0.05) { // Log occasionally (5% of checks)
+            log('Cart state - Items:', data.items.length, 'Total:', data.total);
+        }
+
+        // Check total changed (always send total when it changes)
+        if (data.total !== null && data.total !== lastTotal && data.total > 0) {
             lastTotal = data.total;
-            log('Total:', lastTotal);
+            log('💰 TOTAL CHANGED:', lastTotal);
             sendToServer({
                 type: 'total',
                 total: lastTotal,
@@ -77,22 +85,26 @@
         }
 
         // Check items added
-        if (data.items.length > lastItemCount) {
-            const newItems = data.items.slice(lastItemCount);
+        if (data.items.length !== lastItemCount) {
+            if (data.items.length > lastItemCount) {
+                // Items were added
+                const newItems = data.items.slice(lastItemCount);
+                log('🛒 ITEMS ADDED:', newItems.length);
+                
+                newItems.forEach(item => {
+                    if (item && item.name) {
+                        log('📦 New item:', item.name, 'Price:', item.Total_price || item.Net_price);
+                        sendToServer({
+                            type: 'item',
+                            name: item.name,
+                            price: item.Total_price || item.Net_price || 0,
+                            quantity: item.quantity || 1,
+                            timestamp: new Date().toISOString()
+                        });
+                    }
+                });
+            }
             lastItemCount = data.items.length;
-            
-            newItems.forEach(item => {
-                if (item && item.name) {
-                    log('Item:', item.name);
-                    sendToServer({
-                        type: 'item',
-                        name: item.name,
-                        price: item.Total_price || item.Net_price || 0,
-                        quantity: item.quantity || 1,
-                        timestamp: new Date().toISOString()
-                    });
-                }
-            });
         }
     }
 
