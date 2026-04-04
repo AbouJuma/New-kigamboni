@@ -120,34 +120,28 @@
     // ── Convert raw value to display amount ───────────────────────────
     function toDisplayAmount(raw) {
         const n = parseFloat(raw);
-        // If value looks like it's in cents (suspiciously large for TZS display)
-        // e.g. 1000 for a 10 TSH item — divide by 100
-        // We detect this by checking if it's a round multiple of 100 and > 10000
-        // Actually: let user toggle this if needed. Default: send as-is.
-        // The /100 issue was in old code. Current bridge.js does NOT divide.
-        // So send the raw value directly.
         return Math.round(n);
     }
 
     // ── Send to server ────────────────────────────────────────────────
     async function sendToServer(total) {
+        const status = document.getElementById('display-status');
         try {
-            setStatus('Sending...', '#999');
+            status.textContent = 'Sending...';
             const response = await fetch(CONFIG.serverUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'total',
-                    type: 'total',
-                    total: total,
+                    total: parseFloat(total),
                     timestamp: new Date().toISOString()
                 })
             });
             const result = await response.json();
-            setStatus('✅ Sent: TSH ' + total.toLocaleString(), '#4CAF50');
-            console.log('[Display] Sent:', total);
+            status.textContent = '✅ Auto-sent: TSH ' + total;
+            console.log('[Display] Auto-sent:', total);
         } catch (err) {
-            setStatus('❌ ' + err.message, '#f44336');
+            status.textContent = '❌ Error: ' + err.message;
         }
     }
 
@@ -181,11 +175,8 @@
 
     // ── Button handlers ───────────────────────────────────────────────
     document.getElementById('send-display').onclick = function() {
-        const val = parseFloat(document.getElementById('display-total').value);
-        if (val > 0) {
-            lastTotal = val; // prevent double-send
-            sendToServer(val);
-        }
+        const total = document.getElementById('display-total').value;
+        if (total && total > 0) sendToServer(total);
     };
 
     document.getElementById('auto-send').onchange = function() {
