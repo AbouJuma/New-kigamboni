@@ -94,8 +94,13 @@ class DisplayService {
         if (!this.isConnected) return;
         if (text === this.lastText) return;
         this.lastText = text;
-        const padded = text.toString().substring(0, 20).padEnd(20, ' ');
-        this.displayPort.write(padded, (err) => {
+        
+        // Clear display first (ESC @), then write text
+        const clearCmd = Buffer.from([0x1B, 0x40]); // ESC @ = Clear
+        const textBuf = Buffer.from(text.toString().substring(0, 20), 'ascii');
+        const data = Buffer.concat([clearCmd, textBuf]);
+        
+        this.displayPort.write(data, (err) => {
             if (err) this.log(`❌ Write error: ${err.message}`);
             else this.log(`📺 Display: "${text}"`);
         });
@@ -110,16 +115,19 @@ class DisplayService {
                 const action = d.action || d.type;
                 
                 if (action === 'total' && d.total !== undefined) {
-                    this.showText(`TOTAL: ${(d.total/100).toFixed(2)}`);
+                    // Send raw number only - POS displays need pure digits
+                    const formatted = (d.total/100).toFixed(2).replace(/\./g, ''); // 20000 -> 20000 without decimal
+                    this.showText(formatted);
                 } else if (action === 'item' && (d.itemName || d.name)) {
                     this.showText((d.itemName || d.name).substring(0, 16));
                     if (d.total !== undefined) {
                         setTimeout(() => {
-                            this.showText(`TOTAL: ${(d.total/100).toFixed(2)}`);
+                            const formatted = (d.total/100).toFixed(2).replace(/\./g, '');
+                            this.showText(formatted);
                         }, 3000);
                     }
                 } else if (action === 'clear') {
-                    this.showText('');
+                    this.showText('0');
                 }
             }
         } catch (e) {
