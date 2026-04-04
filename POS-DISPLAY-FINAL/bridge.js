@@ -15,15 +15,19 @@ const config = {
     logFile: path.join(__dirname, 'bridge.log')
 };
 
+// ─── Try these baud rates in order until display shows correctly ───
+// 4800, 9600, 2400, 19200
+const BAUD_RATE = 4800;
+
 class DisplayService {
     constructor() {
         this.displayPort = null;
         this.isConnected = false;
-        this.lastData = null;
         this.lastText = '';
 
         this.log('Starting Display Service...');
         this.log(`Server: ${config.serverUrl}`);
+        this.log(`Baud rate: ${BAUD_RATE}`);
 
         this.connectDisplay();
         this.startPolling();
@@ -42,15 +46,13 @@ class DisplayService {
 
             for (const portPath of ['COM1', 'COM2']) {
                 if (ports.some(p => p.path === portPath)) {
-                    this.log(`Trying ${portPath}...`);
+                    this.log(`Trying ${portPath} at ${BAUD_RATE} baud...`);
                     try {
-                        if (this.displayPort) {
-                            await this.closePort();
-                        }
+                        if (this.displayPort) await this.closePort();
 
                         this.displayPort = new SerialPort({
                             path: portPath,
-                            baudRate: 9600,
+                            baudRate: BAUD_RATE,
                             autoOpen: false,
                             dataBits: 8,
                             stopBits: 1,
@@ -61,24 +63,19 @@ class DisplayService {
                         });
 
                         await new Promise((resolve, reject) => {
-                            this.displayPort.open(err => {
-                                if (err) reject(err);
-                                else resolve();
-                            });
+                            this.displayPort.open(err => err ? reject(err) : resolve());
                         });
 
                         this.isConnected = true;
-                        this.log(`✅ Display on ${portPath}`);
+                        this.log(`✅ Display on ${portPath} at ${BAUD_RATE} baud`);
 
-                        // Show READY on startup
-                        setTimeout(() => this.showText('   READY'), 300);
+                        // Blank display on startup
+                        setTimeout(() => this.showText('        '), 300);
                         return;
 
                     } catch (err) {
                         this.log(`❌ ${portPath}: ${err.message}`);
-                        if (this.displayPort) {
-                            try { this.displayPort.close(); } catch(e) {}
-                        }
+                        if (this.displayPort) try { this.displayPort.close(); } catch(e) {}
                     }
                 }
             }
@@ -91,10 +88,7 @@ class DisplayService {
     async closePort() {
         return new Promise(resolve => {
             if (!this.displayPort) return resolve();
-            this.displayPort.close(err => {
-                this.isConnected = false;
-                resolve();
-            });
+            this.displayPort.close(() => { this.isConnected = false; resolve(); });
         });
     }
 
@@ -103,28 +97,21 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
 
-        // DO NOT use 0x0C — it renders as 'F' on this display
-        // Instead: CR → 8 spaces (wipe) → CR → actual text
+        // CR (0x0D) + exactly 8 chars padded with spaces
         const cr      = Buffer.from([0x0D]);
-        const blank   = Buffer.from('        ', 'ascii'); // 8 spaces
-        const cr2     = Buffer.from([0x0D]);
-        const textBuf = Buffer.from(text.toString().substring(0, 8), 'ascii');
-
-        const data = Buffer.concat([cr, blank, cr2, textBuf]);
+        const padded  = text.toString().padStart(8, ' ').slice(-8);
+        const textBuf = Buffer.from(padded, 'ascii');
+        const data    = Buffer.concat([cr, textBuf]);
 
         this.displayPort.write(data, (err) => {
             if (err) this.log(`❌ Write error: ${err.message}`);
-            else this.log(`📺 Display: "${text}"`);
+            else this.log(`📺 Display: "${padded}"`);
         });
     }
 
     formatAmount(total) {
-        // Server sends whole TZS: 8000 = 8,000/=  7000 = 7,000/=
-        // No division needed — display as plain right-aligned integer
-        const amount = Math.round(total);
-        return amount.toString().padStart(8, ' ').substring(0, 8);
-        // e.g. 8000 → "    8000"
-        // e.g. 7000 → "    7000"
+        // Server sends whole TZS units: 20000 → "   20000"
+        return Math.round(total).toString();
     }
 
     async poll() {
@@ -136,24 +123,21 @@ class DisplayService {
                 const action = d.action || d.type;
 
                 if (action === 'total' && d.total !== undefined) {
-                    const formatted = this.formatAmount(d.total);
-                    this.showText(formatted);
+                    this.showText(this.formatAmount(d.total));
 
                 } else if (action === 'item' && (d.itemName || d.name)) {
-                    const name = (d.itemName || d.name).substring(0, 8).padEnd(8, ' ');
+                    const name = (d.itemName || d.name).substring(0, 8);
                     this.showText(name);
-
                     if (d.total !== undefined) {
                         setTimeout(() => {
                             this.lastText = '';
-                            const formatted = this.formatAmount(d.total);
-                            this.showText(formatted);
+                            this.showText(this.formatAmount(d.total));
                         }, 3000);
                     }
 
                 } else if (action === 'clear') {
                     this.lastText = '';
-                    this.showText('       0');
+                    this.showText('0');
                 }
             }
         } catch (e) {
@@ -179,25 +163,18 @@ class DisplayService {
             };
 
             const req = https.get(options, res => {
-                let data = '';
-                res.on('data', c => data += c);
+                let body = '';
+                res.on('data', c => body += c);
                 res.on('end', () => {
-                    this.log(`Response: ${res.statusCode}, Data: ${data.substring(0, 200)}`);
-                    if (res.statusCode !== 200) {
-                        reject(new Error(`HTTP ${res.statusCode}`));
-                    } else if (data.trim().startsWith('<')) {
-                        reject(new Error(`HTML response: ${data.substring(0, 100)}`));
-                    } else {
-                        try { resolve(JSON.parse(data)); } catch(e) { reject(e); }
-                    }
+                    this.log(`Response: ${res.statusCode}, Data: ${body.substring(0, 200)}`);
+                    if (res.statusCode !== 200) reject(new Error(`HTTP ${res.statusCode}`));
+                    else if (body.trim().startsWith('<')) reject(new Error(`HTML response`));
+                    else try { resolve(JSON.parse(body)); } catch(e) { reject(e); }
                 });
             });
 
             req.on('error', reject);
-            req.setTimeout(5000, () => {
-                req.destroy();
-                reject(new Error('Request timeout'));
-            });
+            req.setTimeout(5000, () => { req.destroy(); reject(new Error('timeout')); });
         });
     }
 
