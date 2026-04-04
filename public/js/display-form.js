@@ -179,8 +179,20 @@
     };
 
     // ── Start ─────────────────────────────────────────────────────────
-    setInterval(watchAndSend, CONFIG.pollInterval);
-    setStatus('Watching...', '#999');
-    console.log('[Display] v6 started');
+    // Wait for Vue to load before starting
+    setTimeout(() => {
+        setInterval(watchAndSend, CONFIG.pollInterval);
+        setStatus('Watching...', '#999');
+        console.log('[Display] v6 started');
+        
+        // Add manual trigger if no detection after 5 seconds
+        setTimeout(() => {
+            const result = getTotalFromDOM();
+            if (!result) {
+                setStatus('⚠️ Click "Send" to manually trigger', '#f44336');
+                console.log('[Display] Auto-detection failed, manual mode');
+            }
+        }, 5000);
+    }, 2000); // Wait 2 seconds for Vue to initialize
 
 })();
