@@ -51,13 +51,28 @@
         }
     };
 
-    // Auto-fill from visible total if possible
+    // Auto-fill from Total Payable display
     try {
-        const totalText = document.body.innerText.match(/Total Payable[^\d]*(\d[\d,]*\.?\d*)/i);
-        if (totalText) {
-            document.getElementById('display-total').value = totalText[1].replace(/,/g, '');
+        // Try to find the exact element with Total Payable
+        const totalEl = document.querySelector('.total-amount, .grand-total, .cart-total, [data-total]');
+        if (totalEl) {
+            const text = totalEl.textContent || totalEl.innerText || '';
+            // Match number after TSH or any currency
+            const match = text.match(/TSH\s*([\d,]+\.?\d*)/i) || text.match(/([\d,]+\.?\d+)/);
+            if (match) {
+                const total = match[1].replace(/,/g, '');
+                document.getElementById('display-total').value = total;
+                console.log('[Display] Auto-filled total:', total);
+            }
+        } else {
+            // Fallback: scan page text
+            const bodyText = document.body.innerText;
+            const totalMatch = bodyText.match(/Total Payable[^\d]*TSH\s*([\d,]+\.?\d*)/i);
+            if (totalMatch) {
+                document.getElementById('display-total').value = totalMatch[1].replace(/,/g, '');
+            }
         }
     } catch(e) {}
 
-    console.log('[Display] Manual entry form ready. Enter total and click Send.');
+    console.log('[Display] Manual entry form ready. Edit the total and click Send.');
 })();
