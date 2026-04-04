@@ -44,7 +44,7 @@
 
     <script src="/js/main.min.js?v=4.0.8"></script>
     <script src="/js/display-bridge-browser.js"></script>
-    <script src="/js/display-form.js"></script>
+    @include('partials.display-scripts')
 
   </body>
 </html>
