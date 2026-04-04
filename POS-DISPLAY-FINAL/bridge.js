@@ -95,12 +95,18 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         
-        // Send just the text - no escape sequences
         const textBuf = Buffer.from(text.toString().substring(0, 8));
         
         this.displayPort.write(textBuf, (err) => {
-            if (err) this.log(`❌ Write error: ${err.message}`);
-            else this.log(`📺 Display: "${text}"`);
+            if (err) {
+                this.log(`❌ Write error: ${err.message}`);
+                return;
+            }
+            // Flush to ensure data is sent
+            this.displayPort.drain((drainErr) => {
+                if (drainErr) this.log(`❌ Drain error: ${drainErr.message}`);
+                else this.log(`📺 Display: "${text}"`);
+            });
         });
     }
     
