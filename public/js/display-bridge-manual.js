@@ -62,19 +62,34 @@
         log('Vue instances found:', vueCount, 'With GrandTotal:', foundVueWithGrandTotal);
         
         // Fallback: read from DOM - try multiple selectors
-        const selectors = ['.grand-total', '.total-display', '.total-amount', '[data-total]', '.total-payable', '.cart-total'];
+        const selectors = [
+            '.grand-total', '.total-display', '.total-amount', '[data-total]', 
+            '.total-payable', '.cart-total', '.pos-total',
+            'td:contains("Total")', '.amount', '.total'
+        ];
         for (let sel of selectors) {
-            const totalEl = document.querySelector(sel);
-            if (totalEl) {
-                const text = totalEl.textContent || totalEl.innerText || '';
-                log('Found element with selector:', sel, 'Text:', text);
-                const match = text.match(/[\d,]+\.?\d*/);
-                if (match) {
-                    const total = parseFloat(match[0].replace(/,/g, ''));
-                    log('Found total in DOM:', total);
-                    return { total: total, items: [] };
+            try {
+                const totalEl = document.querySelector(sel);
+                if (totalEl) {
+                    const text = totalEl.textContent || totalEl.innerText || '';
+                    log('Found element with selector:', sel, 'Text:', text);
+                    const match = text.match(/[\d,]+\.?\d*/);
+                    if (match) {
+                        const total = parseFloat(match[0].replace(/,/g, ''));
+                        log('Found total in DOM:', total);
+                        return { total: total, items: [] };
+                    }
                 }
-            }
+            } catch(e) {}
+        }
+        
+        // Last resort: scan all text for "Total Payable" pattern
+        const allText = document.body.innerText;
+        const totalMatch = allText.match(/Total Payable[^\d]*(\d[\d,]*\.?\d*)/i);
+        if (totalMatch) {
+            const total = parseFloat(totalMatch[1].replace(/,/g, ''));
+            log('Found total in page text:', total);
+            return { total: total, items: [] };
         }
         
         return null;
