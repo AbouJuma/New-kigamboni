@@ -95,14 +95,12 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         
-        // Send CR + text - position cursor then write
-        const cr = Buffer.from([0x0D]); // Carriage return
-        const textBuf = Buffer.from(text.toString().substring(0, 8));
-        const data = Buffer.concat([cr, textBuf]);
+        // Just send raw text - no control codes
+        const raw = text.toString().substring(0, 8);
         
-        this.displayPort.write(data, (err) => {
+        this.displayPort.write(raw, (err) => {
             if (err) this.log(`❌ Write error: ${err.message}`);
-            else this.log(`📺 Display: "${text}"`);
+            else this.log(`📺 Display: "${raw}"`);
         });
     }
     
