@@ -170,9 +170,13 @@
         const amount = toDisplayAmount(result.raw);
         setSource('Source: ' + result.prop);
 
-        // Update input field to show detected value
-        document.getElementById('display-total').value = amount;
+        // ALWAYS update input field to show current detected value
+        const input = document.getElementById('display-total');
+        if (input && input.value !== String(amount)) {
+            input.value = amount;
+        }
 
+        // Only SEND when amount actually changes
         if (amount !== lastTotal && amount > 0) {
             lastTotal = amount;
             sendToServer(amount);
