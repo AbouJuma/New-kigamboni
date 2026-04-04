@@ -14,8 +14,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-$dataFile = __DIR__ . '/storage/app/display_data.json';
-$lockFile = __DIR__ . '/storage/app/display.lock';
+// Ensure storage directory exists
+$dataDir = __DIR__ . '/storage/app';
+if (!is_dir($dataDir)) {
+    mkdir($dataDir, 0755, true);
+}
+
+$dataFile = $dataDir . '/display_data.json';
+$lockFile = $dataDir . '/display.lock';
 
 function acquireLock($lockFile, $timeout = 5) {
     $startTime = time();
