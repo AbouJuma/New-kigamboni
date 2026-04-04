@@ -1,26 +1,28 @@
 /**
  * Customer Display Bridge - Browser Side
- * Quick fix - no npm build needed!
- * Just upload this file and include in your blade template
  */
 (function() {
     'use strict';
 
     const CONFIG = {
         serverUrl: 'https://client.ecofieldgroup.com/delight/display-bridge.php',
-        pollInterval: 2000,
+        pollInterval: 500,
         debug: true
     };
 
     let lastTotal = 0;
     let lastItem = null;
+    let foundVue = false;
 
-    function log(msg) {
-        if (CONFIG.debug) console.log('[Display Bridge]', msg);
+    function log(msg, data) {
+        if (CONFIG.debug) {
+            console.log('[Display Bridge]', msg, data || '');
+        }
     }
 
     async function sendToServer(data) {
         try {
+            log('SENDING:', data);
             const response = await fetch(CONFIG.serverUrl, {
                 method: 'POST',
                 headers: {
@@ -30,28 +32,56 @@
                 body: JSON.stringify(data)
             });
             const result = await response.json();
-            log('Sent: ' + JSON.stringify(data) + ' | Response: ' + JSON.stringify(result));
+            log('SERVER RESPONSE:', result);
             return result;
         } catch (err) {
-            log('Error: ' + err.message);
+            log('ERROR:', err.message);
         }
     }
 
-    // Watch for total changes in Vue app
-    function watchTotal() {
-        // Try to find Vue instance and GrandTotal
-        const vueEl = document.querySelector('#app') || document.querySelector('.pos-app');
-        if (!vueEl || !vueEl.__vue__) {
-            log('Vue app not found, retrying...');
+    // Find Vue instance - multiple methods
+    function findVueInstance() {
+        // Method 1: __vue__ property
+        let el = document.querySelector('#app') || document.querySelector('.pos-app') || document.querySelector('[data-v-app]');
+        if (el && el.__vue__) {
+            if (!foundVue) log('Found Vue via __vue__');
+            return el.__vue__;
+        }
+
+        // Method 2: Scan all elements for __vue__
+        const allElements = document.querySelectorAll('*');
+        for (let el of allElements) {
+            if (el.__vue__) {
+                if (!foundVue) log('Found Vue via element scan');
+                return el.__vue__;
+            }
+        }
+
+        return null;
+    }
+
+    // Watch for changes
+    function watchCart() {
+        const vm = findVueInstance();
+        
+        if (!vm) {
+            if (!foundVue) {
+                const appEl = document.querySelector('#app');
+                const posEl = document.querySelector('.pos-app');
+                log('Vue not found. Elements: #app=' + !!appEl + ', .pos-app=' + !!posEl);
+            }
             return;
         }
 
-        const vm = vueEl.__vue__;
-        
-        // Watch GrandTotal
+        if (!foundVue) {
+            foundVue = true;
+            log('✅ Vue found! Keys:', Object.keys(vm).slice(0, 10).join(', '));
+        }
+
+        // Check for GrandTotal
         if (vm.GrandTotal !== undefined && vm.GrandTotal !== lastTotal) {
             lastTotal = vm.GrandTotal;
-            log('Total changed: ' + lastTotal);
+            log('Total changed:', lastTotal);
             sendToServer({
                 type: 'total',
                 total: lastTotal,
@@ -59,83 +89,72 @@
             });
         }
 
-        // Watch cart items
-        if (vm.details && vm.details.length > 0) {
+        // Check for cart items
+        if (vm.details && Array.isArray(vm.details) && vm.details.length > 0) {
             const lastDetail = vm.details[vm.details.length - 1];
-            if (lastDetail && lastDetail.name !== lastItem) {
+            if (lastDetail && lastDetail.name && lastDetail.name !== lastItem) {
                 lastItem = lastDetail.name;
-                log('Item added: ' + lastItem);
+                log('Item added:', lastItem);
                 sendToServer({
                     type: 'item',
                     name: lastDetail.name,
                     price: lastDetail.Total_price || lastDetail.Net_price,
-                    quantity: lastDetail.quantity,
+                    quantity: lastDetail.quantity || 1,
                     timestamp: new Date().toISOString()
                 });
             }
         }
     }
 
-    // Alternative: Watch DOM for changes
-    function watchDOM() {
-        const totalEl = document.querySelector('.grand-total, .total-display, [data-total]');
-        if (totalEl) {
-            const text = totalEl.textContent || totalEl.innerText;
-            const num = parseFloat(text.replace(/[^0-9.]/g, ''));
-            if (!isNaN(num) && num !== lastTotal) {
-                lastTotal = num;
-                log('DOM Total: ' + num);
-                sendToServer({
-                    type: 'total',
-                    total: num,
-                    timestamp: new Date().toISOString()
-                });
+    // Click listener - detect add to cart
+    function watchClicks() {
+        document.addEventListener('click', function(e) {
+            const target = e.target;
+            const text = (target.textContent || '').toLowerCase();
+            
+            if (text.includes('add') || text.includes('cart') || 
+                target.closest('.add-to-cart') || target.closest('.btn-add')) {
+                log('Add to cart clicked');
+                setTimeout(watchCart, 100);
+                setTimeout(watchCart, 500);
             }
-        }
+        });
     }
 
     // Initialize
     function init() {
-        log('Browser bridge initialized');
+        log('=== Display Bridge v2 Started ===');
         
-        // Try Vue watch first
-        setInterval(watchTotal, CONFIG.pollInterval);
-        
-        // Fallback to DOM watch
-        setInterval(watchDOM, CONFIG.pollInterval);
+        setInterval(watchCart, CONFIG.pollInterval);
+        watchClicks();
 
-        // Also try to hook into Vue events
-        if (window.Vue && window.Vue.prototype) {
-            const originalEmit = window.Vue.prototype.$emit;
-            window.Vue.prototype.$emit = function(event, ...args) {
-                if (event === 'item-added' || event === 'cart-updated') {
-                    log('Vue event: ' + event);
-                    setTimeout(watchTotal, 100);
-                }
-                return originalEmit.apply(this, [event, ...args]);
-            };
-        }
+        // Add test button
+        const btn = document.createElement('button');
+        btn.textContent = '📺 Test Display';
+        btn.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;background:#4CAF50;color:white;border:none;padding:8px 12px;cursor:pointer;border-radius:4px;font-size:12px;';
+        btn.onclick = function() {
+            watchCart();
+            sendToServer({
+                type: 'test',
+                message: 'Manual test',
+                timestamp: new Date().toISOString()
+            });
+        };
+        document.body.appendChild(btn);
     }
 
-    // Start when DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
 
-    // Global API for manual calls
     window.CustomerDisplay = {
-        showItem: (name, price) => {
-            return sendToServer({ type: 'item', name, price, timestamp: new Date().toISOString() });
-        },
-        showTotal: (total) => {
-            return sendToServer({ type: 'total', total, timestamp: new Date().toISOString() });
-        },
-        clear: () => {
-            return sendToServer({ type: 'clear', timestamp: new Date().toISOString() });
-        }
+        test: () => sendToServer({ type: 'test', timestamp: new Date().toISOString() }),
+        showItem: (name, price) => sendToServer({ type: 'item', name, price, timestamp: new Date().toISOString() }),
+        showTotal: (total) => sendToServer({ type: 'total', total, timestamp: new Date().toISOString() }),
+        findVue: () => { const vm = findVueInstance(); log('Vue:', vm); return vm; }
     };
 
-    log('Global CustomerDisplay API available');
+    log('API: CustomerDisplay.test(), .findVue()');
 })();
