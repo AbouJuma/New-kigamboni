@@ -69,19 +69,34 @@
                 const appEl = document.querySelector('#app');
                 const posEl = document.querySelector('.pos-app');
                 log('Vue not found. Elements: #app=' + !!appEl + ', .pos-app=' + !!posEl);
+                // Try to find any Vue element
+                const all = document.querySelectorAll('*');
+                let vueCount = 0;
+                for (let el of all) {
+                    if (el.__vue__) vueCount++;
+                }
+                log('Elements with __vue__:', vueCount);
             }
             return;
         }
 
         if (!foundVue) {
             foundVue = true;
-            log('✅ Vue found! Keys:', Object.keys(vm).slice(0, 10).join(', '));
+            log('✅ Vue found!');
+            log('  Keys:', Object.keys(vm).slice(0, 20).join(', '));
+            log('  GrandTotal:', vm.GrandTotal);
+            log('  details:', vm.details ? 'Array(' + vm.details.length + ')' : 'undefined');
+        }
+
+        // Always log current state for debugging
+        if (CONFIG.debug && vm.GrandTotal !== undefined) {
+            log('Current GrandTotal:', vm.GrandTotal, 'Last:', lastTotal);
         }
 
         // Check for GrandTotal
         if (vm.GrandTotal !== undefined && vm.GrandTotal !== lastTotal) {
             lastTotal = vm.GrandTotal;
-            log('Total changed:', lastTotal);
+            log('>>> Total CHANGED to:', lastTotal);
             sendToServer({
                 type: 'total',
                 total: lastTotal,
