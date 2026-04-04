@@ -101,13 +101,10 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         
-        // POS Display Protocol: ESC @ (init) + ESC = 2 (select line 2/Total) + text
-        const initCmd = Buffer.from([0x1B, 0x40]); // ESC @ = Initialize
-        const selectLine2 = Buffer.from([0x1B, 0x3D, 0x02]); // ESC = 2
-        const textBuf = Buffer.from(text.toString().padStart(8, ' ').substring(0, 8));
-        const data = Buffer.concat([initCmd, selectLine2, textBuf]);
+        // Just send raw text - pad to fill display and clear old data
+        const raw = text.toString().substring(0, 8).padEnd(8, ' ');
         
-        this.displayPort.write(data, (err) => {
+        this.displayPort.write(raw, (err) => {
             if (err) this.log(`❌ Write error: ${err.message}`);
             else this.log(`📺 Display: "${text}"`);
         });
@@ -122,9 +119,10 @@ class DisplayService {
                 const action = d.action || d.type;
                 
                 if (action === 'total' && d.total !== undefined) {
-                    // Format: divide by 100, show full number
-                    const amount = (d.total / 100).toFixed(2);
-                    this.showText(amount);
+                    // Send number without decimal - display is 8-digit numeric
+                    const num = Math.round(d.total / 100);
+                    const formatted = num.toString().padStart(8, ' ').substring(0, 8);
+                    this.showText(formatted);
                 } else if (action === 'item' && (d.itemName || d.name)) {
                     this.showText((d.itemName || d.name).substring(0, 16));
                     if (d.total !== undefined) {
