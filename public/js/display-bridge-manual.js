@@ -33,32 +33,47 @@
 
     // Read Vue data safely - find the one with GrandTotal
     function getCartData() {
+        let vueCount = 0;
+        let foundVueWithGrandTotal = false;
+        
         const allElements = document.querySelectorAll('*');
         for (let el of allElements) {
             if (el.__vue__) {
+                vueCount++;
                 const vm = el.__vue__;
                 try {
                     // Look for the POS Vue instance (has GrandTotal)
                     if (typeof vm.GrandTotal !== 'undefined') {
+                        foundVueWithGrandTotal = true;
                         log('Found Vue with GrandTotal:', vm.GrandTotal);
                         return {
                             total: vm.GrandTotal,
                             items: vm.details || []
                         };
                     }
+                    // Also check if it has details (cart items)
+                    if (vm.details && Array.isArray(vm.details)) {
+                        log('Found Vue with details (items):', vm.details.length);
+                    }
                 } catch(e) {}
             }
         }
         
-        // Fallback: read from DOM
-        const totalEl = document.querySelector('.total-amount, .grand-total, .total-display, [data-total]');
-        if (totalEl) {
-            const text = totalEl.textContent || '';
-            const match = text.match(/[\d,]+\.?\d*/);
-            if (match) {
-                const total = parseFloat(match[0].replace(/,/g, ''));
-                log('Found total in DOM:', total);
-                return { total: total, items: [] };
+        log('Vue instances found:', vueCount, 'With GrandTotal:', foundVueWithGrandTotal);
+        
+        // Fallback: read from DOM - try multiple selectors
+        const selectors = ['.grand-total', '.total-display', '.total-amount', '[data-total]', '.total-payable', '.cart-total'];
+        for (let sel of selectors) {
+            const totalEl = document.querySelector(sel);
+            if (totalEl) {
+                const text = totalEl.textContent || totalEl.innerText || '';
+                log('Found element with selector:', sel, 'Text:', text);
+                const match = text.match(/[\d,]+\.?\d*/);
+                if (match) {
+                    const total = parseFloat(match[0].replace(/,/g, ''));
+                    log('Found total in DOM:', total);
+                    return { total: total, items: [] };
+                }
             }
         }
         
