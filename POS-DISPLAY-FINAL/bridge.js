@@ -52,7 +52,13 @@ class DisplayService {
                         this.displayPort = new SerialPort({
                             path: portPath,
                             baudRate: 9600,
-                            autoOpen: false
+                            autoOpen: false,
+                            dataBits: 8,
+                            stopBits: 1,
+                            parity: 'none',
+                            rtscts: false,
+                            xon: false,
+                            xoff: false
                         });
                         
                         await new Promise((resolve, reject) => {
@@ -95,20 +101,15 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         
-        // Send ESC @ to initialize/clear display, then send text
-        const initCmd = Buffer.from([0x1B, 0x40]); // ESC @ = Initialize/Clear
-        const textBuf = Buffer.from(text.toString().substring(0, 8));
-        const data = Buffer.concat([initCmd, textBuf]);
+        // POS Display Protocol: ESC @ (init) + ESC = 2 (select line 2/Total) + text
+        const initCmd = Buffer.from([0x1B, 0x40]); // ESC @ = Initialize
+        const selectLine2 = Buffer.from([0x1B, 0x3D, 0x02]); // ESC = 2
+        const textBuf = Buffer.from(text.toString().padStart(8, ' ').substring(0, 8));
+        const data = Buffer.concat([initCmd, selectLine2, textBuf]);
         
         this.displayPort.write(data, (err) => {
-            if (err) {
-                this.log(`❌ Write error: ${err.message}`);
-                return;
-            }
-            this.displayPort.drain((drainErr) => {
-                if (drainErr) this.log(`❌ Drain error: ${drainErr.message}`);
-                else this.log(`📺 Display: "${text}"`);
-            });
+            if (err) this.log(`❌ Write error: ${err.message}`);
+            else this.log(`📺 Display: "${text}"`);
         });
     }
     
