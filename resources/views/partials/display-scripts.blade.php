@@ -8,7 +8,7 @@
 
     // ── Config ───────────────────────────────────────────────────────────
     const CONFIG = {
-        serverUrl: '/display-bridge.php',
+        serverUrl: '/delight/display-bridge.php',
         pollInterval: 1000 // Check every second
     };
 
