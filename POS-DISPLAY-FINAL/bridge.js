@@ -95,14 +95,10 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         
-        // Position cursor to line 2 (Total), then write
-        // ESC = 2 for many POS displays positions to line 2
-        const posCmd = Buffer.from([0x1B, 0x3D, 0x02]); // ESC = 2
-        const crlf = Buffer.from([0x0D, 0x0A]);
-        const textBuf = Buffer.from(text.toString().padStart(8, '0').substring(0, 8));
-        const data = Buffer.concat([posCmd, crlf, textBuf]);
+        // Send just the text - no escape sequences
+        const textBuf = Buffer.from(text.toString().substring(0, 8));
         
-        this.displayPort.write(data, (err) => {
+        this.displayPort.write(textBuf, (err) => {
             if (err) this.log(`❌ Write error: ${err.message}`);
             else this.log(`📺 Display: "${text}"`);
         });
@@ -117,9 +113,8 @@ class DisplayService {
                 const action = d.action || d.type;
                 
                 if (action === 'total' && d.total !== undefined) {
-                    // Send raw number padded to 8 digits
-                    const num = Math.round(d.total / 100); // Convert to whole number
-                    const formatted = num.toString().padStart(8, '0').substring(0, 8);
+                    // Send raw number only - POS displays need pure digits
+                    const formatted = (d.total/100).toFixed(2).replace(/\./g, '');
                     this.showText(formatted);
                 } else if (action === 'item' && (d.itemName || d.name)) {
                     this.showText((d.itemName || d.name).substring(0, 16));
