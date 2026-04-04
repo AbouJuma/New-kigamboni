@@ -122,9 +122,9 @@ class DisplayService {
                 const action = d.action || d.type;
                 
                 if (action === 'total' && d.total !== undefined) {
-                    // Send raw number only - POS displays need pure digits
-                    const formatted = (d.total/100).toFixed(2).replace(/\./g, '');
-                    this.showText(formatted);
+                    // Format: divide by 100, show full number
+                    const amount = (d.total / 100).toFixed(2);
+                    this.showText(amount);
                 } else if (action === 'item' && (d.itemName || d.name)) {
                     this.showText((d.itemName || d.name).substring(0, 16));
                     if (d.total !== undefined) {
