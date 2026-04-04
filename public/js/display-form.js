@@ -1,6 +1,6 @@
 /**
- * Customer Display Bridge - Manual Entry
- * Type the total and click send
+ * Customer Display Bridge - Browser Side v4
+ * Auto-detects grand total from Vue and sends to display
  */
 (function() {
     'use strict';
@@ -9,86 +9,193 @@
         serverUrl: 'https://client.ecofieldgroup.com/delight/display-bridge.php',
         pollInterval: 500
     };
-    
+
     let lastTotal = 0;
     let autoSendEnabled = true;
+    let foundVueProp = null; // cache which property name worked
 
-    // Create UI
+    // ── UI ────────────────────────────────────────────────────────────
     const div = document.createElement('div');
-    div.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;background:#fff;border:2px solid #4CAF50;padding:10px;border-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,0.2);';
+    div.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:9999;background:#fff;border:2px solid #4CAF50;padding:10px;border-radius:4px;box-shadow:0 2px 10px rgba(0,0,0,0.2);min-width:180px;';
     div.innerHTML = `
         <div style="font-weight:bold;margin-bottom:5px;">📺 Customer Display</div>
-        <input type="number" id="display-total" placeholder="Total" style="width:100px;padding:5px;margin-right:5px;">
-        <button id="send-display" style="background:#4CAF50;color:white;border:none;padding:5px 10px;cursor:pointer;">Send</button>
-        <label style="margin-left:5px;font-size:12px;"><input type="checkbox" id="auto-send" checked> Auto</label>
-        <div id="display-status" style="margin-top:5px;font-size:12px;color:#666;"></div>
+        <input type="number" id="display-total" placeholder="Total (TSH)" style="width:110px;padding:5px;margin-right:5px;">
+        <button id="send-display" style="background:#4CAF50;color:white;border:none;padding:5px 10px;cursor:pointer;border-radius:3px;">Send</button>
+        <br><label style="margin-top:5px;display:inline-block;font-size:12px;">
+            <input type="checkbox" id="auto-send" checked> Auto-detect
+        </label>
+        <div id="display-status" style="margin-top:5px;font-size:11px;color:#666;"></div>
+        <div id="display-source" style="font-size:10px;color:#999;"></div>
     `;
     document.body.appendChild(div);
 
+    // ── Helpers ───────────────────────────────────────────────────────
+    function setStatus(msg, color) {
+        document.getElementById('display-status').textContent = msg;
+        document.getElementById('display-status').style.color = color || '#666';
+    }
+
+    function setSource(msg) {
+        document.getElementById('display-source').textContent = msg;
+    }
+
+    // ── Find Vue instance by scanning ALL elements ────────────────────
+    function findVueInstance() {
+        // Vue 2: element.__vue__
+        // Vue 3: element.__vue_app__
+        for (const el of document.querySelectorAll('*')) {
+            if (el.__vue__)     return el.__vue__;
+            if (el.__vue_app__) {
+                // Vue 3 - get root component instance
+                const app = el.__vue_app__;
+                if (app._instance) return app._instance.proxy || app._instance;
+            }
+        }
+        return null;
+    }
+
+    // ── Try many possible property names for grand total ─────────────
+    const TOTAL_PROPS = [
+        'GrandTotal', 'grandTotal', 'grand_total',
+        'totalAmount', 'total_amount', 'TotalAmount',
+        'cartTotal', 'cart_total', 'CartTotal',
+        'subTotal', 'SubTotal', 'subtotal',
+        'finalTotal', 'FinalTotal',
+        'totalPrice', 'TotalPrice', 'total_price',
+        'netTotal', 'NetTotal',
+        'payable', 'Payable', 'totalPayable', 'TotalPayable',
+        'amount', 'Amount', 'totalDue', 'TotalDue'
+    ];
+
+    function getVueTotal() {
+        const vm = findVueInstance();
+        if (!vm) return null;
+
+        // If we already found the right property, use it directly
+        if (foundVueProp && vm[foundVueProp] !== undefined) {
+            return { raw: vm[foundVueProp], prop: foundVueProp };
+        }
+
+        // Search all candidate property names
+        for (const prop of TOTAL_PROPS) {
+            const val = vm[prop];
+            if (val !== undefined && val !== null && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
+                foundVueProp = prop;
+                console.log('[Display] ✅ Found total in Vue property:', prop, '=', val);
+                return { raw: val, prop };
+            }
+        }
+
+        // Last resort: log all numeric/array properties to help debug
+        if (!foundVueProp) {
+            const numeric = {};
+            Object.keys(vm).forEach(k => {
+                const v = vm[k];
+                if (typeof v === 'number' && v > 0) numeric[k] = v;
+                else if (Array.isArray(v)) numeric[k] = 'Array(' + v.length + ')';
+            });
+            console.log('[Display] Vue numeric props:', numeric);
+        }
+
+        return null;
+    }
+
+    // ── DOM fallback ──────────────────────────────────────────────────
+    function getDOMTotal() {
+        const selectors = [
+            '.total-payable', '.grand-total', '.total-amount',
+            '.cart-total', '.order-total', '.summary-total',
+            '[class*="grand"]', '[class*="total"]', '[class*="payable"]'
+        ];
+        for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+                const text = el.textContent || '';
+                const match = text.match(/[\d,]+\.?\d*/);
+                if (match) {
+                    const val = parseFloat(match[0].replace(/,/g, ''));
+                    if (val > 0) return { raw: val, prop: 'DOM:' + sel };
+                }
+            }
+        }
+        return null;
+    }
+
+    // ── Convert raw value to display amount ───────────────────────────
+    function toDisplayAmount(raw) {
+        const n = parseFloat(raw);
+        // If value looks like it's in cents (suspiciously large for TZS display)
+        // e.g. 1000 for a 10 TSH item — divide by 100
+        // We detect this by checking if it's a round multiple of 100 and > 10000
+        // Actually: let user toggle this if needed. Default: send as-is.
+        // The /100 issue was in old code. Current bridge.js does NOT divide.
+        // So send the raw value directly.
+        return Math.round(n);
+    }
+
+    // ── Send to server ────────────────────────────────────────────────
     async function sendToServer(total) {
-        const status = document.getElementById('display-status');
         try {
-            status.textContent = 'Sending...';
+            setStatus('Sending...', '#999');
             const response = await fetch(CONFIG.serverUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'total',
-                    total: parseFloat(total),
+                    type: 'total',
+                    total: total,
                     timestamp: new Date().toISOString()
                 })
             });
             const result = await response.json();
-            status.textContent = '✅ Auto-sent: TSH ' + total;
-            console.log('[Display] Auto-sent:', total);
+            setStatus('✅ Sent: TSH ' + total.toLocaleString(), '#4CAF50');
+            console.log('[Display] Sent:', total);
         } catch (err) {
-            status.textContent = '❌ Error: ' + err.message;
-        }
-    }
-    
-    function getTotalFromPage() {
-        // Try Vue first
-        const app = document.querySelector('#app');
-        if (app && app.__vue__) {
-            const vm = app.__vue__;
-            if (vm.GrandTotal !== undefined) {
-                // Return as-is, bridge expects actual amount
-                return vm.GrandTotal;
-            }
-        }
-        // Fallback to DOM - read displayed total
-        const totalPayableEl = document.querySelector('.total-payable, .grand-total, .total-amount');
-        if (totalPayableEl) {
-            const text = totalPayableEl.textContent || '';
-            const match = text.match(/TSH\s*([\d,]+\.?\d*)/i) || text.match(/([\d,]+\.?\d*)/);
-            if (match) {
-                return parseFloat(match[1].replace(/,/g, ''));
-            }
-        }
-        return 0;
-    }
-    
-    function watchAndSend() {
-        const current = getTotalFromPage();
-        if (current !== lastTotal && current > 0) {
-            lastTotal = current;
-            document.getElementById('display-total').value = current;
-            if (autoSendEnabled) {
-                sendToServer(current);
-            }
+            setStatus('❌ ' + err.message, '#f44336');
         }
     }
 
+    // ── Main watch loop ───────────────────────────────────────────────
+    function watchAndSend() {
+        if (!autoSendEnabled) return;
+
+        // Try Vue first, then DOM
+        const result = getVueTotal() || getDOMTotal();
+
+        if (!result) {
+            setSource('⚠️ Source not found');
+            return;
+        }
+
+        const amount = toDisplayAmount(result.raw);
+        setSource('Source: ' + result.prop);
+
+        // Update input field to show detected value
+        document.getElementById('display-total').value = amount;
+
+        if (amount !== lastTotal && amount > 0) {
+            lastTotal = amount;
+            sendToServer(amount);
+        }
+    }
+
+    // ── Button handlers ───────────────────────────────────────────────
     document.getElementById('send-display').onclick = function() {
-        const total = document.getElementById('display-total').value;
-        if (total && total > 0) sendToServer(total);  // Send as-is, no multiply
+        const val = parseFloat(document.getElementById('display-total').value);
+        if (val > 0) {
+            lastTotal = val; // prevent double-send
+            sendToServer(val);
+        }
     };
-    
+
     document.getElementById('auto-send').onchange = function() {
         autoSendEnabled = this.checked;
+        setStatus(autoSendEnabled ? 'Auto-detect ON' : 'Manual mode', '#999');
     };
-    
-    // Start watching
+
+    // ── Start ─────────────────────────────────────────────────────────
     setInterval(watchAndSend, CONFIG.pollInterval);
-    console.log('[Display] Auto-detection active - add items to see updates');
+    setStatus('Watching...', '#999');
+    console.log('[Display] v4 started — add items to cart to test');
+
 })();
