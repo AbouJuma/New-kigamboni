@@ -101,10 +101,12 @@ class DisplayService {
         if (text === this.lastText) return;
         this.lastText = text;
         
-        // Just send raw text - pad to fill display and clear old data
-        const raw = text.toString().substring(0, 8).padEnd(8, ' ');
+        // CR + text - position cursor then write
+        const cr = Buffer.from([0x0D]); // Carriage return
+        const textBuf = Buffer.from(text.toString().substring(0, 8));
+        const data = Buffer.concat([cr, textBuf]);
         
-        this.displayPort.write(raw, (err) => {
+        this.displayPort.write(data, (err) => {
             if (err) this.log(`❌ Write error: ${err.message}`);
             else this.log(`📺 Display: "${text}"`);
         });
