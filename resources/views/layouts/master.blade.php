@@ -43,6 +43,7 @@
     </script>
 
     <script src="/js/main.min.js?v=4.0.8"></script>
+    <script src="{{ asset('js/display-bridge-browser.js') }}"></script>
 
   </body>
 </html>
