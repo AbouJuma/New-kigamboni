@@ -17,7 +17,7 @@ const config = {
 
 // ─── Try these baud rates in order until display shows correctly ───
 // 4800, 9600, 2400, 19200
-const BAUD_RATE = 4800;
+const BAUD_RATE = 2400;
 
 class DisplayService {
     constructor() {
