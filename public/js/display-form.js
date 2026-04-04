@@ -68,9 +68,45 @@
     ];
 
     function getVueTotal() {
-        const vm = findVueInstance();
-        if (!vm) return null;
-
+        const app = document.querySelector('#app');
+        if (!app) {
+            console.log('[Display] No #app element found');
+            return null;
+        }
+        
+        let vm = app.__vue__;
+        if (!vm) {
+            // Try to find any element with __vue__
+            const all = document.querySelectorAll('*');
+            for (let el of all) {
+                if (el.__vue__) {
+                    vm = el.__vue__;
+                    break;
+                }
+            }
+        }
+        
+        if (!vm) {
+            console.log('[Display] No Vue instance found on #app or any element');
+            return null;
+        }
+        
+        console.log('[Display] Vue found! Checking for GrandTotal...');
+        console.log('[Display] Vue keys:', Object.keys(vm).slice(0, 30));
+        
+        if (vm.GrandTotal !== undefined) {
+            console.log('[Display] GrandTotal found:', vm.GrandTotal);
+            return { raw: vm.GrandTotal, prop: 'Vue:GrandTotal' };
+        }
+        
+        // Try _data
+        if (vm._data && vm._data.GrandTotal !== undefined) {
+            console.log('[Display] GrandTotal found in _data:', vm._data.GrandTotal);
+            return { raw: vm._data.GrandTotal, prop: 'Vue:_data.GrandTotal' };
+        }
+        
+        console.log('[Display] GrandTotal NOT found on Vue instance');
+        
         // If we already found the right property, use it directly
         if (foundVueProp && vm[foundVueProp] !== undefined) {
             return { raw: vm[foundVueProp], prop: foundVueProp };
