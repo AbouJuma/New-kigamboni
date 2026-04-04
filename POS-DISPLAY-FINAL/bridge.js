@@ -70,9 +70,8 @@ class DisplayService {
                         this.isConnected = true;
                         this.log(`✅ Display on ${portPath}`);
 
-                        // Send initial clear + ready message
-                        this.clearDisplay();
-                        setTimeout(() => this.showText('   READY'), 500);
+                        // Show READY on startup
+                        setTimeout(() => this.showText('   READY'), 300);
                         return;
 
                     } catch (err) {
@@ -99,32 +98,19 @@ class DisplayService {
         });
     }
 
-    clearDisplay() {
-        if (!this.isConnected) return;
-        // 0x0C = Form Feed = clear screen on most pole displays
-        // 0x0D = Carriage Return = move cursor to start
-        const clearBuf = Buffer.from([0x0C, 0x0D]);
-        this.displayPort.write(clearBuf, (err) => {
-            if (err) this.log(`❌ Clear error: ${err.message}`);
-            else this.log('🧹 Display cleared');
-        });
-    }
-
     showText(text) {
         if (!this.isConnected) return;
         if (text === this.lastText) return;
         this.lastText = text;
 
-        // 0x0C = Form Feed (clear display)
-        // 0x0D = Carriage Return (cursor to home)
-        const clear   = Buffer.from([0x0C]);
-        const home    = Buffer.from([0x0D]);
+        // DO NOT use 0x0C — it renders as 'F' on this display
+        // Instead: CR → 8 spaces (wipe) → CR → actual text
+        const cr      = Buffer.from([0x0D]);
+        const blank   = Buffer.from('        ', 'ascii'); // 8 spaces
+        const cr2     = Buffer.from([0x0D]);
+        const textBuf = Buffer.from(text.toString().substring(0, 8), 'ascii');
 
-        // Allow up to 9 chars to accommodate decimal point (e.g. " 800.36 ")
-        const padded  = text.toString().substring(0, 9);
-        const textBuf = Buffer.from(padded, 'ascii');
-
-        const data = Buffer.concat([clear, home, textBuf]);
+        const data = Buffer.concat([cr, blank, cr2, textBuf]);
 
         this.displayPort.write(data, (err) => {
             if (err) this.log(`❌ Write error: ${err.message}`);
@@ -132,11 +118,13 @@ class DisplayService {
         });
     }
 
-    formatAmount(totalInCents) {
-        // Server sends total in cents: 80036 => 800.36, 50000 => 500.00
-        const amount = (totalInCents / 100).toFixed(2);   // e.g. "800.36"
-        // Right-align in 8 chars (dot counts as a char here)
-        return amount.padStart(8, ' ').substring(0, 8);   // e.g. "  800.36"
+    formatAmount(total) {
+        // Server sends whole TZS: 8000 = 8,000/=  7000 = 7,000/=
+        // No division needed — display as plain right-aligned integer
+        const amount = Math.round(total);
+        return amount.toString().padStart(8, ' ').substring(0, 8);
+        // e.g. 8000 → "    8000"
+        // e.g. 7000 → "    7000"
     }
 
     async poll() {
@@ -148,26 +136,24 @@ class DisplayService {
                 const action = d.action || d.type;
 
                 if (action === 'total' && d.total !== undefined) {
-                    // total is in cents: 80036 = 800.36 TZS
                     const formatted = this.formatAmount(d.total);
                     this.showText(formatted);
 
                 } else if (action === 'item' && (d.itemName || d.name)) {
-                    // Show item name first (max 8 chars)
                     const name = (d.itemName || d.name).substring(0, 8).padEnd(8, ' ');
                     this.showText(name);
 
-                    // Then show item price after 3 seconds
                     if (d.total !== undefined) {
                         setTimeout(() => {
+                            this.lastText = '';
                             const formatted = this.formatAmount(d.total);
                             this.showText(formatted);
                         }, 3000);
                     }
 
                 } else if (action === 'clear') {
-                    this.lastText = ''; // force re-send even if same
-                    this.showText('    0.00');
+                    this.lastText = '';
+                    this.showText('       0');
                 }
             }
         } catch (e) {
