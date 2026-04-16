@@ -1,0 +1,15 @@
+[Unit]
+Description=Customer Display Bridge Service
+After=network.target
+
+[Service]
+Type=simple
+User=ecofield
+WorkingDirectory=/home/ecofield/delight/POS-DISPLAY-FINAL
+ExecStart=/usr/bin/node bridge.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
